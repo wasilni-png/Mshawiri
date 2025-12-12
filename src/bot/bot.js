@@ -1,4 +1,4 @@
-const { Telegraf, Markup, session } = require('telegraf');
+Const { Telegraf, Markup, session } = require('telegraf');
 const { message } = require('telegraf/filters');
 
 const mapService = require('../services/maps');
@@ -10,8 +10,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_IDS = process.env.ADMIN_USER_IDS ? process.env.ADMIN_USER_IDS.split(',').map(id => parseInt(id)) : [];
 
 class RideSharingBot {
-    
-    constructor(supabaseClientInstance) {
+        constructor(supabaseClientInstance) {
         this.bot = new Telegraf(BOT_TOKEN);
         this.userStates = new Map();
         this.activeRides = new Map();
@@ -21,11 +20,11 @@ class RideSharingBot {
         
         this.setupMiddleware();
         this.setupHandlers();
+        
+        // 🛑 السطر المفقود: استدعاء دالة الاشتراك في Supabase Realtime
+        this.setupSupabaseSubscriptions();
     }
 
-    setupMiddleware() {
-        this.bot.use(session());
-        this.bot.use(async (ctx, next) => {
             ctx.session = ctx.session || {};
             
             // تخزين موقع المستخدم الحالي في الجلسة إذا كان متاحاً
@@ -443,6 +442,43 @@ class RideSharingBot {
     async handleSupport(ctx) {
         ctx.reply('للدعم الفني، يرجى إرسال رسالتك الآن...');
     }
+// /////////////////////////////////////////
+// 🛑 دوال الاشتراك في Supabase Realtime
+// /////////////////////////////////////////
+
+setupSupabaseSubscriptions() {
+    // الاشتراك في تحديثات جدول "rides"
+    this.supabase
+        .channel('rides_channel') // اسم القناة
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'rides' },
+            (payload) => {
+                console.log('✅ New Ride Inserted via Realtime:', payload.new);
+                // هنا يتم استدعاء منطق المطابقة مباشرة عند إضافة مشوار جديد
+                matchingService.handleNewRideRequest(payload.new);
+            }
+        )
+        .subscribe((status) => {
+            console.log(`rides INSERT subscription status: ${status}`);
+        });
+
+    // الاشتراك في تحديثات جدول "users" (إذا كنت تحتاجها)
+    this.supabase
+        .channel('users_channel')
+        .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'users' },
+            (payload) => {
+                // قد تحتاج هذه لتتبع تحديث موقع السائقين
+                // console.log('User Updated:', payload.new);
+            }
+        )
+        .subscribe((status) => {
+            console.log(`users UPDATE subscription status: ${status}`);
+        });
+}
+
 
     // /////////////////////////////////////////
     // 🛑 الدوال المساعدة والتشغيل (Helpers)
@@ -555,3 +591,5 @@ class RideSharingBot {
 
 
 module.exports = RideSharingBot;
+
+هذا هو الملف تاكد انت من وجودها
