@@ -511,7 +511,35 @@ class RideSharingBot {
         );
     }
 
-    // في ملف RideSharingBot.js
+        async launch() { // 🛑 جعل الدالة async
+        const URL = 'https://mshawiri.onrender.com';
+        const PORT = process.env.PORT || 3000;
+
+        // 🛑 تعيين الـ Webhook لمرة واحدة فقط باستخدام if/else:
+        try {
+            const webhookInfo = await this.bot.telegram.getWebhookInfo();
+            if (webhookInfo.url !== `${URL}/telegraf`) {
+                await this.bot.telegram.setWebhook(`${URL}/telegraf`);
+                console.log(`✅ Webhook set to: ${URL}/telegraf`);
+            } else {
+                console.log('✅ Webhook already set. Skipping re-assignment.');
+            }
+        } catch (err) {
+            console.error('❌ Error checking/setting Webhook:', err.message);
+            // قد يكون هذا هو المكان الذي يحدث فيه خطأ 429. سنتجاهله للمتابعة.
+        }
+
+        // 🛑 تشغيل البوت باستخدام Webhook
+        this.bot.launch({
+            webhook: {
+                domain: URL,
+                port: PORT
+            }
+        });
+
+        console.log('🤖 Ride Sharing Bot is running via Webhook...');
+        
+       // في ملف RideSharingBot.js
 
     launch() {
         // 🛑 تأكد من أن هذا الرابط هو رابط Render الفعلي الذي تستخدمه
@@ -542,6 +570,9 @@ class RideSharingBot {
         // ملاحظة: لا ننسى مشكلة Supabase Realtime التي يجب معالجتها لاحقاً.
     }
 }
+
+    }
+
 
 
 module.exports = RideSharingBot;
