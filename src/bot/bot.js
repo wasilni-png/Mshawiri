@@ -511,11 +511,20 @@ class RideSharingBot {
         );
     }
 
-        async launch() { // 🛑 جعل الدالة async
+        // في ملف RideSharingBot.js (ابحث عن الدالة launch وقم باستبدالها بالكامل)
+
+    // /////////////////////////////////////////
+    // 🛑 الدوال المساعدة والتشغيل (Helpers)
+    // /////////////////////////////////////////
+    
+    // ... (هنا تأتي الدوال المساعدة الأخرى مثل notifyDriverOfRide)
+    
+    // 🛑 توحيد دالة التشغيل لتكون دالة واحدة وآمنة عبر Webhook
+    async launch() {
         const URL = 'https://mshawiri.onrender.com';
         const PORT = process.env.PORT || 3000;
 
-        // 🛑 تعيين الـ Webhook لمرة واحدة فقط باستخدام if/else:
+        // 1. منطق تعيين Webhook (لمنع خطأ 429)
         try {
             const webhookInfo = await this.bot.telegram.getWebhookInfo();
             if (webhookInfo.url !== `${URL}/telegraf`) {
@@ -526,10 +535,9 @@ class RideSharingBot {
             }
         } catch (err) {
             console.error('❌ Error checking/setting Webhook:', err.message);
-            // قد يكون هذا هو المكان الذي يحدث فيه خطأ 429. سنتجاهله للمتابعة.
         }
 
-        // 🛑 تشغيل البوت باستخدام Webhook
+        // 2. تشغيل البوت باستخدام Webhook
         this.bot.launch({
             webhook: {
                 domain: URL,
@@ -539,39 +547,12 @@ class RideSharingBot {
 
         console.log('🤖 Ride Sharing Bot is running via Webhook...');
         
-       // في ملف RideSharingBot.js
-
-    launch() {
-        // 🛑 تأكد من أن هذا الرابط هو رابط Render الفعلي الذي تستخدمه
-        const URL = 'https://mshawiri.onrender.com'; 
-        const PORT = process.env.PORT || 3000;
-        
-        // 🛑 إيقاف Polling واستخدام Webhook
-        this.bot.launch({
-            webhook: {
-                domain: URL, // المجال العام لخادم Render
-                port: PORT   // المنفذ الذي يستمع إليه الخادم
-            }
-        });
-        
-        // 🛑 إرسال أمر تعيين Webhook إلى Telegram API
-        this.bot.telegram.setWebhook(`${URL}/telegraf`).then(result => {
-             console.log(`✅ Webhook set to: ${URL}/telegraf`);
-        }).catch(err => {
-             console.error('❌ Failed to set Webhook:', err);
-        });
-
-        console.log('🤖 Ride Sharing Bot is running via Webhook...');
-        
-        // Enable graceful stop
+        // 3. تمكين الإيقاف السليم (لبيئات التشغيل التي تدعمه)
         process.once('SIGINT', () => this.bot.stop('SIGINT'));
         process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
-
-        // ملاحظة: لا ننسى مشكلة Supabase Realtime التي يجب معالجتها لاحقاً.
     }
 }
 
-    }
 
 
 
