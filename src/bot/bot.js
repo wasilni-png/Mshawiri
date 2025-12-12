@@ -511,15 +511,38 @@ class RideSharingBot {
         );
     }
 
+    // في ملف RideSharingBot.js
+
     launch() {
-        this.bot.launch();
-        console.log('🤖 Ride Sharing Bot is running...');
+        // 🛑 تأكد من أن هذا الرابط هو رابط Render الفعلي الذي تستخدمه
+        const URL = 'https://mshawiri.onrender.com'; 
+        const PORT = process.env.PORT || 3000;
+        
+        // 🛑 إيقاف Polling واستخدام Webhook
+        this.bot.launch({
+            webhook: {
+                domain: URL, // المجال العام لخادم Render
+                port: PORT   // المنفذ الذي يستمع إليه الخادم
+            }
+        });
+        
+        // 🛑 إرسال أمر تعيين Webhook إلى Telegram API
+        this.bot.telegram.setWebhook(`${URL}/telegraf`).then(result => {
+             console.log(`✅ Webhook set to: ${URL}/telegraf`);
+        }).catch(err => {
+             console.error('❌ Failed to set Webhook:', err);
+        });
+
+        console.log('🤖 Ride Sharing Bot is running via Webhook...');
         
         // Enable graceful stop
         process.once('SIGINT', () => this.bot.stop('SIGINT'));
         process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
+
+        // ملاحظة: لا ننسى مشكلة Supabase Realtime التي يجب معالجتها لاحقاً.
     }
 }
+
 
 module.exports = RideSharingBot;
 
