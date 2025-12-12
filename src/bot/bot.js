@@ -82,12 +82,11 @@ class RideSharingBot {
     async handleStart(ctx) {
         const userId = ctx.from.id;
         
-        // تم تصحيح هذا ليعمل مع نظام Supabase
         const { data: user, error } = await this.supabase
             .from('users')
             .select('*')
             .eq('telegram_id', userId)
-            .maybeSingle(); // استخدام maybeSingle أفضل من single() في هذه الحالة
+            .maybeSingle();
 
         if (error) {
             console.error('Start command DB error:', error);
@@ -214,8 +213,6 @@ class RideSharingBot {
             const { data, error } = await this.supabase
                 .from('rides')
                 .select('*')
-                // بما أننا نستخدم الآن users.id كمفتاح أساسي، يجب أولاً الحصول على الـ id الداخلي
-                // ولكن سنستخدم telegram_id مؤقتاً إذا كان passenger_id في الجدول هو telegram_id.
                 .eq('passenger_id', userId) 
                 .in('status', ['pending', 'searching', 'driver_assigned', 'in_progress']);
                 
@@ -250,7 +247,6 @@ class RideSharingBot {
         }
         
         try {
-            // 🛑 كان هذا الجزء يسبب خطأ نحوي لأنه كان خارج أي دالة
             const route = await mapService.calculateRoute(pickup, destination);
             const fare = pricingService.calculateFare(route.distance, route.duration);
 
@@ -526,9 +522,11 @@ class RideSharingBot {
         const URL = 'https://mshawiri.onrender.com';
         const PORT = process.env.PORT || 3000;
 
-        // 1. منطق تعيين Webhook (لمنع خطأ 429)
+        // 1. منطق تعيين Webhook (نستخدم الفحص الآمن لمنع خطأ 429)
         try {
             const webhookInfo = await this.bot.telegram.getWebhookInfo();
+            
+            // 🛑 إذا لم يكن الـ URL الحالي هو URL Render الخاص بنا، قم بتعيينه
             if (webhookInfo.url !== `${URL}/telegraf`) {
                 await this.bot.telegram.setWebhook(`${URL}/telegraf`);
                 console.log(`✅ Webhook set to: ${URL}/telegraf`);
