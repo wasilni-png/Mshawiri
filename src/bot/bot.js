@@ -82,11 +82,16 @@ class RideSharingBot {
     async handleStart(ctx) {
         const userId = ctx.from.id;
         
-        const { data: user } = await this.supabase
+        // تم تصحيح هذا ليعمل مع نظام Supabase
+        const { data: user, error } = await this.supabase
             .from('users')
             .select('*')
             .eq('telegram_id', userId)
-            .single();
+            .maybeSingle(); // استخدام maybeSingle أفضل من single() في هذه الحالة
+
+        if (error) {
+            console.error('Start command DB error:', error);
+        }
 
         if (!user) {
             // New user - show registration options
@@ -122,7 +127,6 @@ class RideSharingBot {
 
     async handleLocation(ctx) {
         const location = ctx.message.location;
-        const userId = ctx.from.id;
         const session = ctx.session;
 
         // 🛑 مسار طلب المشوار (التقاط ثم وجهة)
@@ -169,7 +173,7 @@ class RideSharingBot {
         const user = ctx.from;
 
         // Save user to database
-        const { data, error } = await this.supabase
+        const { error } = await this.supabase
             .from('users')
             .insert({
                 telegram_id: user.id,
@@ -201,18 +205,18 @@ class RideSharingBot {
     // 🛑 دوال الراكب (Passenger Functions)
     // /////////////////////////////////////////
 
-        async handleNewRide(ctx) {
+    async handleNewRide(ctx) {
         const userId = ctx.from.id;
         let activeRide = null;
         
         try {
-            // 🛑 التأكد من أن اسم الجدول هنا صحيح
+            // الاستعلام عن المشاوير النشطة
             const { data, error } = await this.supabase
-                .from('rides') // <== تأكد من أن هذا هو اسم الجدول الصحيح
+                .from('rides')
                 .select('*')
                 // بما أننا نستخدم الآن users.id كمفتاح أساسي، يجب أولاً الحصول على الـ id الداخلي
-                // ولكن إذا كان هذا الاستعلام يعمل مباشرة مع telegram_id، فهو لا يزال يعمل.
-                .eq('passenger_id', userId) // قد تحتاج إلى تغيير هذا إلى telegram_id إذا كان لا يعمل
+                // ولكن سنستخدم telegram_id مؤقتاً إذا كان passenger_id في الجدول هو telegram_id.
+                .eq('passenger_id', userId) 
                 .in('status', ['pending', 'searching', 'driver_assigned', 'in_progress']);
                 
             if (data && data.length > 0) {
@@ -220,18 +224,13 @@ class RideSharingBot {
             }
             
             if (error) {
-                // 🛑 طبع الخطأ إذا حدث
                 console.error('Supabase query error in handleNewRide:', error);
             }
 
         } catch (e) {
-            // 🛑 إذا فشل الاتصال بالشبكة
             console.error('Critical error fetching active ride:', e);
-            // إرسال رد للمستخدم حتى لا يتوقف البوت
             return ctx.reply('حدث خطأ داخلي أثناء التحقق من المشاوير النشطة. يرجى المحاولة مرة أخرى.');
         }
-
-        // ... (بقية المنطق)
 
         if (activeRide) {
             return ctx.reply('لديك مشوار نشط بالفعل. يرجى إنهاء المشوار الحالي أولاً.');
@@ -241,47 +240,61 @@ class RideSharingBot {
         return ctx.reply('لطلب مشوار جديد، فضلاً، أرسل لنا موقع الالتقاء عبر خاصية مشاركة الموقع في الدردشة (Share Location).');
     }
 
-
-        // Calculate route and pricing
-        const route = await mapService.calculateRoute(pickup, destination);
-        const fare = pricingService.calculateFare(route.distance, route.duration);
-
-        // Create ride record
-        const { data: ride } = await this.supabase
-            .from('rides')
-            .insert({
-                passenger_id: userId,
-                pickup_location: `POINT(${pickup.longitude} ${pickup.latitude})`,
-                destination: `POINT(${destination.longitude} ${destination.latitude})`,
-                distance_km: route.distance,
-                duration_minutes: route.duration,
-                estimated_fare: fare,
-                status: 'pending'
-            })
-            .select()
-            .single();
-
-        // Show ride summary
-        const pickupAddress = await mapService.reverseGeocode(pickup);
-        const destAddress = await mapService.reverseGeocode(destination);
+    async processRideRequest(ctx, destination) {
+        const userId = ctx.from.id;
+        const pickup = ctx.session.pickupLocation;
         
-        // تنظيف الحالة بعد نجاح معالجة الطلب
-        delete ctx.session.state; 
-        delete ctx.session.pickupLocation;
+        if (!pickup || !destination) {
+            ctx.session.state = 'awaiting_pickup';
+            return ctx.reply('عفواً، لم يتم تحديد موقع الالتقاء بشكل صحيح. يرجى البدء من جديد.');
+        }
+        
+        try {
+            // 🛑 كان هذا الجزء يسبب خطأ نحوي لأنه كان خارج أي دالة
+            const route = await mapService.calculateRoute(pickup, destination);
+            const fare = pricingService.calculateFare(route.distance, route.duration);
 
-        ctx.replyWithHTML(
-            `<b>ملخص الطلب:</b>\n\n` +
-            `📍 <b>من:</b> ${pickupAddress}\n` +
-            `🎯 <b>إلى:</b> ${destAddress}\n` +
-            `📏 <b>المسافة:</b> ${route.distance.toFixed(2)} كم\n` +
-            `⏱️ <b>الوقت المتوقع:</b> ${route.duration} دقيقة\n` +
-            `💰 <b>الأجرة المقدرة:</b> ${fare.toFixed(2)} ريال\n\n` +
-            `هل تريد تأكيد الطلب؟`,
-            Markup.inlineKeyboard([
-                Markup.button.callback('تأكيد الطلب 🟢', `confirm_ride_${ride.id}`),
-                Markup.button.callback('تعديل الوجهة ✏️', 'change_destination')
-            ])
-        );
+            // Create ride record
+            const { data: ride } = await this.supabase
+                .from('rides')
+                .insert({
+                    passenger_id: userId,
+                    pickup_location: `POINT(${pickup.longitude} ${pickup.latitude})`,
+                    destination: `POINT(${destination.longitude} ${destination.latitude})`,
+                    distance_km: route.distance,
+                    duration_minutes: route.duration,
+                    estimated_fare: fare,
+                    status: 'pending'
+                })
+                .select()
+                .single();
+
+            // Show ride summary
+            const pickupAddress = await mapService.reverseGeocode(pickup);
+            const destAddress = await mapService.reverseGeocode(destination);
+            
+            // تنظيف الحالة بعد نجاح معالجة الطلب
+            delete ctx.session.state; 
+            delete ctx.session.pickupLocation;
+
+            ctx.replyWithHTML(
+                `<b>ملخص الطلب:</b>\n\n` +
+                `📍 <b>من:</b> ${pickupAddress}\n` +
+                `🎯 <b>إلى:</b> ${destAddress}\n` +
+                `📏 <b>المسافة:</b> ${route.distance.toFixed(2)} كم\n` +
+                `⏱️ <b>الوقت المتوقع:</b> ${route.duration} دقيقة\n` +
+                `💰 <b>الأجرة المقدرة:</b> ${fare.toFixed(2)} ريال\n\n` +
+                `هل تريد تأكيد الطلب؟`,
+                Markup.inlineKeyboard([
+                    Markup.button.callback('تأكيد الطلب 🟢', `confirm_ride_${ride.id}`),
+                    Markup.button.callback('تعديل الوجهة ✏️', 'change_destination')
+                ])
+            );
+        } catch (error) {
+            console.error('Ride processing error:', error);
+            ctx.session.state = null;
+            return ctx.reply('عذراً، حدث خطأ أثناء حساب المسافة أو الأجرة. يرجى المحاولة مرة أخرى.');
+        }
     }
     
     async handleConfirmRide(ctx) {
@@ -460,7 +473,7 @@ class RideSharingBot {
             .from('users')
             .select('current_location')
             .eq('telegram_id', userId)
-            .single();
+            .maybeSingle();
 
         if (user && user.current_location) {
             // يتم تحويل POINT(lon lat) إلى كائن { longitude, latitude }
@@ -508,15 +521,7 @@ class RideSharingBot {
         );
     }
 
-        // في ملف RideSharingBot.js (ابحث عن الدالة launch وقم باستبدالها بالكامل)
-
-    // /////////////////////////////////////////
-    // 🛑 الدوال المساعدة والتشغيل (Helpers)
-    // /////////////////////////////////////////
-    
-    // ... (هنا تأتي الدوال المساعدة الأخرى مثل notifyDriverOfRide)
-    
-    // 🛑 توحيد دالة التشغيل لتكون دالة واحدة وآمنة عبر Webhook
+    // 🛑 دالة التشغيل الآمنة عبر Webhook (Async)
     async launch() {
         const URL = 'https://mshawiri.onrender.com';
         const PORT = process.env.PORT || 3000;
@@ -551,7 +556,4 @@ class RideSharingBot {
 }
 
 
-
-
 module.exports = RideSharingBot;
-
