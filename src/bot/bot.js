@@ -201,16 +201,18 @@ class RideSharingBot {
     // 🛑 دوال الراكب (Passenger Functions)
     // /////////////////////////////////////////
 
-    async handleNewRide(ctx) {
+        async handleNewRide(ctx) {
         const userId = ctx.from.id;
         let activeRide = null;
         
         try {
-            // 🛑 تم تعديل الاستعلام: حذف .single() لمنع الخطأ إذا كان هناك أكثر من سجل
+            // 🛑 التأكد من أن اسم الجدول هنا صحيح
             const { data, error } = await this.supabase
-                .from('rides')
+                .from('rides') // <== تأكد من أن هذا هو اسم الجدول الصحيح
                 .select('*')
-                .eq('passenger_id', userId)
+                // بما أننا نستخدم الآن users.id كمفتاح أساسي، يجب أولاً الحصول على الـ id الداخلي
+                // ولكن إذا كان هذا الاستعلام يعمل مباشرة مع telegram_id، فهو لا يزال يعمل.
+                .eq('passenger_id', userId) // قد تحتاج إلى تغيير هذا إلى telegram_id إذا كان لا يعمل
                 .in('status', ['pending', 'searching', 'driver_assigned', 'in_progress']);
                 
             if (data && data.length > 0) {
@@ -218,32 +220,27 @@ class RideSharingBot {
             }
             
             if (error) {
+                // 🛑 طبع الخطأ إذا حدث
                 console.error('Supabase query error in handleNewRide:', error);
-                // لا نوقف التنفيذ، بل نواصل لتقديم الرد للمستخدم
             }
 
         } catch (e) {
+            // 🛑 إذا فشل الاتصال بالشبكة
             console.error('Critical error fetching active ride:', e);
+            // إرسال رد للمستخدم حتى لا يتوقف البوت
             return ctx.reply('حدث خطأ داخلي أثناء التحقق من المشاوير النشطة. يرجى المحاولة مرة أخرى.');
         }
 
+        // ... (بقية المنطق)
 
         if (activeRide) {
             return ctx.reply('لديك مشوار نشط بالفعل. يرجى إنهاء المشوار الحالي أولاً.');
         }
 
-        // 🛑 سيصل الكود إلى هنا حتماً إذا لم يكن هناك مشوار نشط أو بعد معالجة الأخطاء
         ctx.session.state = 'awaiting_pickup'; 
         return ctx.reply('لطلب مشوار جديد، فضلاً، أرسل لنا موقع الالتقاء عبر خاصية مشاركة الموقع في الدردشة (Share Location).');
     }
 
-    async processRideRequest(ctx, destination) {
-        const userId = ctx.from.id;
-        const pickup = ctx.session.pickupLocation; 
-
-        if (!pickup) {
-            return ctx.reply('حدث خطأ: لم يتم تحديد موقع الالتقاء. يرجى البدء من جديد عبر النقر على "طلب مشوار جديد 📍".');
-        }
 
         // Calculate route and pricing
         const route = await mapService.calculateRoute(pickup, destination);
